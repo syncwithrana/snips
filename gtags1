@@ -1,0 +1,53 @@
+const fs = require('fs').promises;
+const path = require('path');
+const { spawn } = require('child_process');
+
+const exts = new Set(['.c', '.cc', '.cpp', '.h', '.hpp']);
+
+async function getSources(dir, out = []) {
+  for (const e of await fs.readdir(dir, { withFileTypes: true })) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) await getSources(full, out);
+    else if (exts.has(path.extname(e.name))) out.push(full);
+  }
+  return out;
+}
+
+async function runGtags(root) {
+  const files = await getSources(root);
+  const p = spawn('gtags', ['-f', '-'], { cwd: root });
+  for (const f of files) p.stdin.write(f + '\n');
+  p.stdin.end();
+  return new Promise(r => p.on('close', r));
+}
+
+(async () => {
+  await runGtags('/your/root/dir');
+})();
+
+
+const { spawn } = require('child_process');
+const fs = require('fs');
+const readline = require('readline');
+
+function runCommandAndTransform(cmd, args, cwd, outFile, transform) {
+  const child = spawn(cmd, args, { cwd });
+  const out = fs.createWriteStream(outFile);
+  const rl = readline.createInterface({ input: child.stdout });
+
+  rl.on('line', line => {
+    const t = transform(line);
+    if (t != null) out.write(t + '\n');
+  });
+
+  child.on('close', () => out.end());
+}
+
+// Example: run ls and lowercase every line
+runCommandAndTransform(
+  'ls',
+  ['-1'],
+  '.',
+  'files.txt',
+  line => line.toLowerCase()
+);
